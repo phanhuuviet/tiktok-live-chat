@@ -6,4 +6,6 @@ export const SOCKET_MESSAGE = {
     SEND_MESSAGE: 'send-message',
     RECEIVE_MESSAGE: 'receive-message',
     JOINED_ROOM: 'joined-room',
+    JOIN_LIVE: 'join-live',
+    LEAVE_LIVE: 'leave-live',
 };
