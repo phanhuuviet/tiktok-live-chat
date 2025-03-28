@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { WebcastPushConnection } from 'tiktok-live-connector';
 
-import { SOCKET_MESSAGE } from '../constants/socket-message.js';
+import { SOCKET_MESSAGE, TIKTOK_LIVE_MESSAGE } from '../constants/socket-message.js';
 import { convertTimestampToISO } from '../utils/index.js';
 
 const liveConnectionsBySocketId = {}; // Store connection for each socket
@@ -50,13 +50,26 @@ const configurationSocket = (server) => {
                         console.error('Failed to connect', err);
                     });
 
-                tiktokLiveConnection.on('chat', (chatData) => {
+                // Listen for chat messages
+                tiktokLiveConnection.on(TIKTOK_LIVE_MESSAGE.CHAT, (chatData) => {
                     console.log(
                         `${chatData.uniqueId} (userId:${chatData.userId}, userName: ${chatData.nickname}) writes: ${
                             chatData.comment
                         }. At: ${convertTimestampToISO(chatData.createTime)}`,
                     );
                     socket.emit('chat-message', chatData);
+                });
+
+                // Listen for stream end
+                tiktokLiveConnection.on(TIKTOK_LIVE_MESSAGE.STREAM_END, () => {
+                    console.log('Stream ended');
+                    socket.emit('stream-end', { message: 'Stream ended' });
+                    if (liveConnectionsBySocketId[socket.id]) {
+                        liveConnectionsBySocketId[socket.id].disconnect();
+                        delete liveConnectionsBySocketId[socket.id];
+                        console.log(`Disconnected from TikTok Live for ${tiktokUsername} due to stream end`);
+                        // socket.emit('live-disconnected', { message: `Disconnected from ${tiktokUsername}` });
+                    }
                 });
 
                 // Listen for disconnect request

@@ -9,3 +9,8 @@ export const SOCKET_MESSAGE = {
     JOIN_LIVE: 'join-live',
     LEAVE_LIVE: 'leave-live',
 };
+
+export const TIKTOK_LIVE_MESSAGE = {
+    CHAT: 'chat',
+    STREAM_END: 'stream-end',
+};
