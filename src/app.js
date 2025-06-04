@@ -6,7 +6,6 @@ import express from 'express';
 
 import routes from './routes/index.js';
 import configurationSocket from './socket/index.js';
-import { connectDb } from './utils/connectDb.js';
 
 dotenv.config();
 const app = express();
@@ -26,7 +25,7 @@ routes(app);
 const startServer = async () => {
     try {
         // Connect DB
-        await connectDb();
+        // await connectDb();
         console.log('✅ Database connected successfully');
 
         // Connect socket

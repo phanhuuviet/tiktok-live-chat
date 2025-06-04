@@ -57,12 +57,17 @@ const configurationSocket = (server) => {
                             chatData.comment
                         }. At: ${convertTimestampToISO(chatData.createTime)}`,
                     );
-                    socket.emit('chat-message', chatData);
+
+                    const formatedChatData = {
+                        ...chatData,
+                        createTime: convertTimestampToISO(chatData.createTime),
+                    };
+
+                    socket.emit('chat-message', formatedChatData);
                 });
 
                 // Listen for stream end
                 tiktokLiveConnection.on(TIKTOK_LIVE_MESSAGE.STREAM_END, () => {
-                    console.log('Stream ended');
                     socket.emit('stream-end', { message: 'Stream ended' });
                     if (liveConnectionsBySocketId[socket.id]) {
                         liveConnectionsBySocketId[socket.id].disconnect();
