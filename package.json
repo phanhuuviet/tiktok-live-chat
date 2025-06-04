@@ -32,7 +32,7 @@
         "multer-storage-cloudinary": "^4.0.0",
         "nodemon": "^3.1.9",
         "socket.io": "^4.8.1",
-        "tiktok-live-connector": "^1.2.3"
+        "tiktok-live-connector": "^2.0.5-beta1"
     },
     "devDependencies": {
         "eslint": "^9.21.0",

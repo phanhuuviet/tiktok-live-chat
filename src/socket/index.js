@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
-import { WebcastPushConnection } from 'tiktok-live-connector';
+import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
 
-import { SOCKET_MESSAGE, TIKTOK_LIVE_MESSAGE } from '../constants/socket-message.js';
+import { SOCKET_MESSAGE } from '../constants/socket-message.js';
 import { convertTimestampToISO } from '../utils/index.js';
 
 const liveConnectionsBySocketId = {}; // Store connection for each socket
@@ -17,79 +17,74 @@ const configurationSocket = (server) => {
         console.log(`User connected: ${socket.id}`);
 
         socket.on(SOCKET_MESSAGE.JOIN_LIVE, async (data) => {
-            try {
-                const { tiktokUsername } = data;
-                if (!tiktokUsername) {
-                    socket.emit('error', { message: 'TikTok username is required' });
-                    return;
-                }
+            const { tiktokUsername } = data;
 
-                // Check if a connection already exists for the username
-                if (liveConnectionsBySocketId[socket.id]) {
-                    socket.emit('error', { message: 'Already connected to a live' });
-                    return;
-                }
+            if (!tiktokUsername) {
+                socket.emit('error', { message: 'TikTok username is required' });
+                return;
+            }
 
-                console.log(`Connecting to TikTok Live for ${tiktokUsername}...`);
+            if (liveConnectionsBySocketId[socket.id]) {
+                socket.emit('error', { message: 'Already connected to a live' });
+                return;
+            }
 
-                const tiktokLiveConnection = new WebcastPushConnection(tiktokUsername, {
-                    requestOptions: {
-                        timeout: 30000,
-                    },
-                });
+            console.log(`Connecting to TikTok Live for ${tiktokUsername}...`);
+            const tiktokLiveConnection = new TikTokLiveConnection(tiktokUsername, {
+                requestOptions: {
+                    timeout: 30000,
+                },
+                generateSignatureFunction: async (url) => {
+                    console.log('📦 Sign request for:', url);
 
-                // Store the connection for the username
-                liveConnectionsBySocketId[socket.id] = tiktokLiveConnection;
-
-                tiktokLiveConnection
-                    .connect()
-                    .then((state) => {
-                        console.info(`Connected to roomId ${state.roomId}`);
-                    })
-                    .catch((err) => {
-                        console.error('Failed to connect', err);
+                    // eslint-disable-next-line no-undef
+                    const response = await fetch('http://localhost:8080/signature', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url }),
                     });
 
-                // Listen for chat messages
-                tiktokLiveConnection.on(TIKTOK_LIVE_MESSAGE.CHAT, (chatData) => {
-                    console.log(
-                        `${chatData.uniqueId} (userId:${chatData.userId}, userName: ${chatData.nickname}) writes: ${
-                            chatData.comment
-                        }. At: ${convertTimestampToISO(chatData.createTime)}`,
-                    );
+                    const data = await response.json();
+                    return data.signedUrl;
+                },
+            });
 
-                    const formatedChatData = {
-                        ...chatData,
-                        createTime: convertTimestampToISO(chatData.createTime),
-                    };
+            try {
+                const state = await tiktokLiveConnection.connect();
 
-                    socket.emit('chat-message', formatedChatData);
+                // Chỉ khi kết nối thành công mới lưu và lắng nghe
+                liveConnectionsBySocketId[socket.id] = tiktokLiveConnection;
+
+                console.info(`Connected to roomId ${state.roomId}`);
+
+                tiktokLiveConnection.on(WebcastEvent.CHAT, (chatData) => {
+                    socket.emit('chat-message', {
+                        userId: chatData.user.userId,
+                        nickname: chatData.user.nickname,
+                        uniqueId: chatData.user.uniqueId,
+                        comment: chatData.comment,
+                        createTime: convertTimestampToISO(chatData.common.createTime),
+                    });
                 });
 
-                // Listen for stream end
-                tiktokLiveConnection.on(TIKTOK_LIVE_MESSAGE.STREAM_END, () => {
+                tiktokLiveConnection.on(WebcastEvent.STREAM_END, () => {
                     socket.emit('stream-end', { message: 'Stream ended' });
-                    if (liveConnectionsBySocketId[socket.id]) {
-                        liveConnectionsBySocketId[socket.id].disconnect();
-                        delete liveConnectionsBySocketId[socket.id];
-                        console.log(`Disconnected from TikTok Live for ${tiktokUsername} due to stream end`);
-                        // socket.emit('live-disconnected', { message: `Disconnected from ${tiktokUsername}` });
-                    }
+                    tiktokLiveConnection.disconnect();
+                    delete liveConnectionsBySocketId[socket.id];
                 });
 
-                // Listen for disconnect request
                 socket.on(SOCKET_MESSAGE.LEAVE_LIVE, () => {
                     if (liveConnectionsBySocketId[socket.id]) {
                         liveConnectionsBySocketId[socket.id].disconnect();
                         delete liveConnectionsBySocketId[socket.id];
-                        console.log(`Disconnected from TikTok Live for ${tiktokUsername}`);
                         socket.emit('live-disconnected', { message: `Disconnected from ${tiktokUsername}` });
                     }
                 });
             } catch (err) {
-                console.error('Failed to connect', err);
-                socket.emit('error', { message: 'Failed to connect to TikTok Live' });
-                return;
+                console.error('❌ Failed to connect to live:', err.message || err);
+                socket.emit('error', {
+                    message: `Failed to connect to ${tiktokUsername}. This live may have ended or does not exist.`,
+                });
             }
         });
 
